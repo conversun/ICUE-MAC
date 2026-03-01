@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: icue-xc7
+Version: 0.1.0
+Summary: Corsair XC7 RGB ELITE LCD — macOS RGB Control CLI
+Requires-Python: >=3.10
+Requires-Dist: hidapi

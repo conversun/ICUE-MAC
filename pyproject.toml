@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "icue-xc7"
+version = "0.1.0"
+description = "Corsair XC7 RGB ELITE LCD — macOS RGB Control CLI"
+requires-python = ">=3.10"
+dependencies = ["hidapi"]
+
+[project.scripts]
+icue-xc7 = "icue_xc7.cli:main"

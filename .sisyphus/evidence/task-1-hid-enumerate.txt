@@ -1,0 +1,19 @@
+=== HID ENUMERATION FOR XC7 (VID:0x1B1C, PID:0x0C42) ===
+
+Found 1 XC7 device(s)
+
+Device 0:
+  path: b'DevSrvsID:4294969092'
+  vendor_id: 0x1b1c
+  product_id: 0x0c42
+  manufacturer_string: Corsair
+  product_string: CORSAIR XC7 ELITE LCD CPU Water Block
+  serial_number: 2329079710067
+  usage_page: 0x000c
+  usage: 0x0001
+  interface_number: 0
+
+
+=== INTERPRETATION ===
+✅ SUCCESS: XC7 device found on HID bus
+   Device is ready for HID communication

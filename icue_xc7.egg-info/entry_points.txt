@@ -1,0 +1,2 @@
+[console_scripts]
+icue-xc7 = icue_xc7.cli:main

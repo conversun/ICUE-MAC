@@ -1,0 +1,20 @@
+[Step 0] USB Detection: FOUND
+[Step 1] Device 0:
+  path: b'DevSrvsID:4294969092'
+  manufacturer_string: Corsair
+  product_string: CORSAIR XC7 ELITE LCD CPU Water Block
+  serial_number: 2329079710067
+  usage_page: 0x000c
+  usage: 0x0001
+  interface_number: 0
+[Step 1] HID Device: OPENED — Corsair CORSAIR XC7 ELITE LCD CPU Water Block (serial: 2329079710067)
+[Step 2] Raw: 1800660100002602
+[Step 2] Temperature: 35.8°C
+[Step 3] RGB Write: 1024 bytes sent
+[Step 3] Buffer head: 02071fff0000ff0000ff0000ff0000ff
+[Step 3] CHECK: Look at the XC7 water block. Are all LEDs red? (This is the only manual check)
+
+=== VERIFICATION COMPLETE ===
+All 4 steps passed. The XC7 HID protocol works on this macOS system.
+Next: Build full control tool with RGB effects, temperature monitoring, and launchd auto-start.
+Exit code: 0

@@ -1,0 +1,11 @@
+pyproject.toml
+icue_xc7/__init__.py
+icue_xc7/cli.py
+icue_xc7/device.py
+icue_xc7/effects.py
+icue_xc7.egg-info/PKG-INFO
+icue_xc7.egg-info/SOURCES.txt
+icue_xc7.egg-info/dependency_links.txt
+icue_xc7.egg-info/entry_points.txt
+icue_xc7.egg-info/requires.txt
+icue_xc7.egg-info/top_level.txt
