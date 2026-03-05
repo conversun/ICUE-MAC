@@ -8,8 +8,13 @@ struct ICUEApp: App {
         MenuBarExtra {
             MenuView(manager: manager)
         } label: {
-            Image(systemName: "drop.fill")
-            Text(String(format: "%.1f°", manager.temperature))
+            HStack(alignment: .center, spacing: 4) {
+                Image(systemName: "drop.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                Text(String(format: "%.1f°", manager.temperature))
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+            }
         }
     }
 }
