@@ -31,7 +31,15 @@ struct MenuView: View {
             Text(prefix(for: .staticColor) + "Static Color")
         }
 
-        effectButton("Rainbow", effect: .rainbow)
+        Menu {
+            ForEach(SpeedPreset.allCases, id: \.rawValue) { speed in
+                Button(speedLabel(speed, current: manager.rainbowSpeed)) {
+                    manager.rainbowSpeed = speed.rawValue
+                }
+            }
+        } label: {
+            Text(prefix(for: .rainbow) + "Rainbow")
+        }
 
         Menu {
             ForEach(RGBColor.presets, id: \.name) { preset in
@@ -40,11 +48,40 @@ struct MenuView: View {
                     manager.setEffect(.breathe)
                 }
             }
+
+            Divider()
+
+            Menu("Speed") {
+                ForEach(SpeedPreset.allCases, id: \.rawValue) { speed in
+                    Button(speedLabel(speed, current: manager.breatheSpeed)) {
+                        manager.breatheSpeed = speed.rawValue
+                    }
+                }
+            }
         } label: {
             Text(prefix(for: .breathe) + "Breathe")
         }
 
-        effectButton("Temperature Color", effect: .tempColor)
+        Menu {
+            ForEach(TempProfile.presets, id: \.name) { profile in
+                Button(tempProfileLabel(profile)) {
+                    manager.setTempProfile(profile)
+                    manager.setEffect(.tempColor)
+                }
+            }
+        } label: {
+            Text(prefix(for: .tempColor) + "Temperature Color")
+        }
+
+        Divider()
+
+        Menu("Brightness: \(BrightnessPreset(rawValue: manager.brightness)?.label ?? "\(Int(manager.brightness * 100))%")") {
+            ForEach(BrightnessPreset.allCases, id: \.rawValue) { preset in
+                Button(brightnessLabel(preset)) {
+                    manager.brightness = preset.rawValue
+                }
+            }
+        }
 
         Divider()
 
@@ -74,6 +111,19 @@ struct MenuView: View {
 
     private func prefix(for effect: LightingEffect) -> String {
         manager.currentEffect == effect ? "● " : "○ "
+    }
+
+    private func speedLabel(_ preset: SpeedPreset, current: Double) -> String {
+        (preset.rawValue == current ? "● " : "○ ") + preset.label
+    }
+
+    private func brightnessLabel(_ preset: BrightnessPreset) -> String {
+        (preset.rawValue == manager.brightness ? "● " : "○ ") + preset.label
+    }
+
+    private func tempProfileLabel(_ profile: TempProfile) -> String {
+        let active = manager.activeTempProfile
+        return (active == profile ? "● " : "○ ") + profile.name
     }
 
     private func openColorPanel(for effect: LightingEffect) {
