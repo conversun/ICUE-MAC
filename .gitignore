@@ -2,3 +2,7 @@
 .sisyphus/
 __pycache__/
 .ruff_cache/
+
+# Swift build outputs
+ICUE-MAC-App/.build/
+ICUE-MAC-App/*.app/
