@@ -509,3 +509,64 @@ class DeviceManager: ObservableObject {
         return Double(dActive) / Double(dTotal)
     }
 }
+
+// MARK: - Language preference
+
+extension DeviceManager {
+    /// User-facing language choice. `.system` means "defer to the macOS locale chain"
+    /// (i.e. no `AppleLanguages` override). The explicit cases match BCP-47 codes
+    /// that line up with the bundled `<locale>.lproj` directories.
+    enum AppLanguage: String, CaseIterable {
+        case system
+        case english = "en"
+        case simplifiedChinese = "zh-Hans"
+
+        /// Display name shown in the menu. Native names for the explicit choices
+        /// ("English", "简体中文") stay verbatim regardless of UI locale; only the
+        /// `.system` label is translated so it reads naturally in either UI.
+        var label: String {
+            switch self {
+            case .system: return NSLocalizedString("System (Auto)", comment: "")
+            case .english: return "English"
+            case .simplifiedChinese: return "简体中文"
+            }
+        }
+    }
+
+    /// Resolves the current override from `UserDefaults[AppleLanguages]`.
+    /// Absent / unrecognized → `.system` (follow the system preference chain).
+    var currentLanguage: AppLanguage {
+        if let langs = UserDefaults.standard.array(forKey: "AppleLanguages") as? [String],
+           let first = langs.first,
+           let match = AppLanguage(rawValue: first) {
+            return match
+        }
+        return .system
+    }
+
+    /// Writes the override and respawns the app so the new locale takes effect on
+    /// every UI string. Cocoa reads `AppleLanguages` once at launch — mutating it
+    /// in-place would only affect strings looked up after the change.
+    func setLanguage(_ language: AppLanguage) {
+        let ud = UserDefaults.standard
+        switch language {
+        case .system:
+            ud.removeObject(forKey: "AppleLanguages")
+        case .english, .simplifiedChinese:
+            ud.set([language.rawValue], forKey: "AppleLanguages")
+        }
+        ud.synchronize()
+
+        // `open -n` forces a fresh instance even if macOS would normally focus the
+        // existing one. The 200 ms grace period gives `open` enough wall-clock to
+        // hand off before we tear down the current process.
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        task.arguments = ["-n", Bundle.main.bundlePath]
+        try? task.run()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            NSApplication.shared.terminate(nil)
+        }
+    }
+}

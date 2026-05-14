@@ -15,7 +15,7 @@ struct MenuView: View {
 
         Menu {
             ForEach(RGBColor.presets, id: \.name) { preset in
-                Button(preset.name) {
+                Button(NSLocalizedString(preset.name, comment: "")) {
                     manager.setStaticColor(preset.color)
                     manager.setEffect(.staticColor)
                 }
@@ -27,7 +27,7 @@ struct MenuView: View {
                 openColorPanel(for: .staticColor)
             }
         } label: {
-            Text(prefix(for: .staticColor) + "Static Color")
+            Text(prefix(for: .staticColor) + NSLocalizedString("Static Color", comment: ""))
         }
 
         Menu {
@@ -38,12 +38,12 @@ struct MenuView: View {
                 }
             }
         } label: {
-            Text(prefix(for: .rainbow) + "Rainbow")
+            Text(prefix(for: .rainbow) + NSLocalizedString("Rainbow", comment: ""))
         }
 
         Menu {
             ForEach(RGBColor.presets, id: \.name) { preset in
-                Button(preset.name) {
+                Button(NSLocalizedString(preset.name, comment: "")) {
                     manager.setBreatheColor(preset.color)
                     manager.setEffect(.breathe)
                 }
@@ -59,7 +59,7 @@ struct MenuView: View {
                 }
             }
         } label: {
-            Text(prefix(for: .breathe) + "Breathe")
+            Text(prefix(for: .breathe) + NSLocalizedString("Breathe", comment: ""))
         }
 
         Menu {
@@ -70,7 +70,7 @@ struct MenuView: View {
                 }
             }
         } label: {
-            Text(prefix(for: .tempColor) + "Temperature Color")
+            Text(prefix(for: .tempColor) + NSLocalizedString("Temperature Color", comment: ""))
         }
 
         Menu {
@@ -81,7 +81,7 @@ struct MenuView: View {
                 }
             }
         } label: {
-            Text(prefix(for: .gradient) + "Gradient")
+            Text(prefix(for: .gradient) + NSLocalizedString("Gradient", comment: ""))
         }
 
         Menu {
@@ -102,12 +102,12 @@ struct MenuView: View {
                 }
             }
         } label: {
-            Text(prefix(for: .wave) + "Wave")
+            Text(prefix(for: .wave) + NSLocalizedString("Wave", comment: ""))
         }
 
         Menu {
             ForEach(RGBColor.presets, id: \.name) { preset in
-                Button(preset.name) {
+                Button(NSLocalizedString(preset.name, comment: "")) {
                     manager.setChaseColor(preset.color)
                     manager.setEffect(.chase)
                 }
@@ -123,7 +123,7 @@ struct MenuView: View {
                 }
             }
         } label: {
-            Text(prefix(for: .chase) + "Chase")
+            Text(prefix(for: .chase) + NSLocalizedString("Chase", comment: ""))
         }
 
         effectButton("Fire", effect: .fire)
@@ -138,7 +138,7 @@ struct MenuView: View {
                 }
             }
         } label: {
-            Text(prefix(for: .colorCycle) + "Color Cycle")
+            Text(prefix(for: .colorCycle) + NSLocalizedString("Color Cycle", comment: ""))
         }
 
         effectButton("CPU Usage", effect: .cpuUsage)
@@ -162,6 +162,14 @@ struct MenuView: View {
             }
         }
 
+        Menu("Language: \(manager.currentLanguage.label)") {
+            ForEach(DeviceManager.AppLanguage.allCases, id: \.rawValue) { lang in
+                Button(languageLabel(lang)) {
+                    manager.setLanguage(lang)
+                }
+            }
+        }
+
         if !manager.isConnected {
             Divider()
             Text("⚠ Device not connected")
@@ -177,7 +185,7 @@ struct MenuView: View {
     }
 
     private func effectButton(_ title: String, effect: LightingEffect) -> some View {
-        Button(prefix(for: effect) + title) {
+        Button(prefix(for: effect) + NSLocalizedString(title, comment: "")) {
             manager.setEffect(effect)
         }
     }
@@ -196,7 +204,7 @@ struct MenuView: View {
 
     private func tempProfileLabel(_ profile: TempProfile) -> String {
         let active = manager.activeTempProfile
-        return (active == profile ? "● " : "○ ") + profile.name
+        return (active == profile ? "● " : "○ ") + NSLocalizedString(profile.name, comment: "")
     }
 
     private func keepAliveLabel(_ interval: TimeInterval) -> String {
@@ -207,8 +215,12 @@ struct MenuView: View {
         (manager.keepAliveInterval == interval ? "● " : "○ ") + keepAliveLabel(interval)
     }
 
+    private func languageLabel(_ lang: DeviceManager.AppLanguage) -> String {
+        (manager.currentLanguage == lang ? "● " : "○ ") + lang.label
+    }
+
     private func gradientPairLabel(_ pair: GradientPair, current: GradientPair?) -> String {
-        (pair == current ? "● " : "○ ") + pair.name
+        (pair == current ? "● " : "○ ") + NSLocalizedString(pair.name, comment: "")
     }
 
     private func openColorPanel(for effect: LightingEffect) {

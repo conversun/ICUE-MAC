@@ -1,0 +1,54 @@
+// English (development region). Keys mirror values verbatim so missing translations
+// in other locales fall back to readable English. Order matches the on-screen menu
+// for easier diffing.
+
+// --- Status row ----------------------------------------------------------
+"Water Temp: %lld°C" = "Water Temp: %lld°C";
+"⚠ Device not connected" = "⚠ Device not connected";
+
+// --- Effect names (used as submenu labels and effect buttons) -----------
+"Off" = "Off";
+"Static Color" = "Static Color";
+"Rainbow" = "Rainbow";
+"Breathe" = "Breathe";
+"Temperature Color" = "Temperature Color";
+"Gradient" = "Gradient";
+"Wave" = "Wave";
+"Chase" = "Chase";
+"Fire" = "Fire";
+"Sparkle" = "Sparkle";
+"Aurora" = "Aurora";
+"Color Cycle" = "Color Cycle";
+"CPU Usage" = "CPU Usage";
+"Time of Day" = "Time of Day";
+
+// --- Generic submenu labels ---------------------------------------------
+"Custom..." = "Custom...";
+"Speed" = "Speed";
+"Brightness: %@" = "Brightness: %@";
+"Keep-Alive: %@" = "Keep-Alive: %@";
+"Language: %@" = "Language: %@";
+"System (Auto)" = "System (Auto)";
+"Quit" = "Quit";
+
+// --- Color presets ------------------------------------------------------
+"Red" = "Red";
+"Orange" = "Orange";
+"Yellow" = "Yellow";
+"Green" = "Green";
+"Blue" = "Blue";
+"Purple" = "Purple";
+"White" = "White";
+
+// --- Gradient-pair presets ---------------------------------------------
+"Blue → Violet" = "Blue → Violet";
+"Sunset" = "Sunset";
+"Ocean" = "Ocean";
+"Candy" = "Candy";
+"Ember" = "Ember";
+
+// --- Temperature-color profiles ----------------------------------------
+"Default (25-35-45°C)" = "Default (25-35-45°C)";
+"Overclocker (30-40-50°C)" = "Overclocker (30-40-50°C)";
+"Server (35-45-55°C)" = "Server (35-45-55°C)";
+"Conservative (20-30-40°C)" = "Conservative (20-30-40°C)";
