@@ -7,8 +7,7 @@ struct MenuView: View {
     @StateObject private var colorPanelObserver = ColorPanelObserver()
 
     var body: some View {
-        Text("Water Temp: \(Int(manager.temperature.rounded()))°C")
-            .disabled(true)
+        TemperatureRow(monitor: manager.temperature)
 
         Divider()
 
@@ -155,6 +154,17 @@ struct MenuView: View {
         panel.setTarget(nil)
         panel.setAction(nil)
         panel.orderFront(nil)
+    }
+}
+
+/// Isolated temperature display so the 3-second poll only invalidates this
+/// one row instead of the whole `MenuView` body. Keeps open submenus intact.
+private struct TemperatureRow: View {
+    @ObservedObject var monitor: TemperatureMonitor
+
+    var body: some View {
+        Text("Water Temp: \(Int(monitor.value.rounded()))°C")
+            .disabled(true)
     }
 }
 

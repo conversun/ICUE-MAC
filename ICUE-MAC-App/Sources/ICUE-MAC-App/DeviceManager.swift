@@ -7,6 +7,16 @@ import os.log
 private let recoveryLog = OSLog(subsystem: "com.cyonsun.icue-xc7", category: "recovery")
 
 
+/// Isolated observable for the live water-temperature reading.
+///
+/// Kept separate from `DeviceManager` so the 3-second temperature poll does
+/// not invalidate `MenuView` and tear down any open submenu. Only the
+/// temperature row subscribes to this object; the rest of the menu stays put.
+@MainActor
+final class TemperatureMonitor: ObservableObject {
+    @Published var value: Double = 0.0
+}
+
 @MainActor
 class DeviceManager: ObservableObject {
     @Published var currentEffect: LightingEffect = .off {
@@ -18,7 +28,7 @@ class DeviceManager: ObservableObject {
     @Published var breatheColor: RGBColor = .blue {
         didSet { UserDefaults.standard.set(breatheColor.rawValue, forKey: "breatheColor") }
     }
-    @Published var temperature: Double = 0.0
+    let temperature = TemperatureMonitor()
     @Published var isConnected: Bool = false
 
     @Published var rainbowSpeed: Double = 1.0 {
@@ -64,6 +74,13 @@ class DeviceManager: ObservableObject {
     private var tempTimer: AnyCancellable?
     private var rainbowOffset: Double = 0.0
     private var breatheTime: Double = 0.0
+    /// True while AppKit is tracking a menu (status-item menu open, submenu hovered, etc.).
+    /// While true, the temperature timer skips its `@Published` write so SwiftUI's
+    /// `MenuBarExtra` does not invalidate and rebuild the underlying `NSMenu` —
+    /// rebuilding tears down whatever submenu the user is currently selecting.
+    /// Apple confirmed (FB13683957) that any state change in the menu hierarchy
+    /// causes a full NSMenu reconstruction, not an incremental update.
+    private var isMenuTracking = false
 
     init() {
         let ud = UserDefaults.standard
@@ -95,6 +112,15 @@ class DeviceManager: ObservableObject {
         hid.start()
         startTemperaturePolling()
         setupRecoveryHandlers()
+        setupMenuTrackingObservers()
+
+        // Apply the restored effect immediately so the keep-alive / animation
+        // timer matches the in-memory state. HID writes are no-ops until IOKit
+        // matches the device; `onDeviceConnected` will re-apply once attached.
+        // Without this, `keepAliveInterval.didSet` above leaves a stale .off
+        // keep-alive timer running because `currentEffect` was still the
+        // default at that point in init.
+        setEffect(currentEffect)
     }
 
 
@@ -122,6 +148,39 @@ class DeviceManager: ObservableObject {
                 // Force immediate refresh: device may have lost state during sleep,
                 // and the next keep-alive tick could be up to 15s away.
                 self.setEffect(self.currentEffect)
+            }
+        }
+    }
+
+    /// Pauses periodic `@Published` writes while any AppKit menu is being tracked.
+    ///
+    /// Without this, the 3-second temperature poll fires `objectWillChange` on
+    /// `TemperatureMonitor` (or any other periodic publisher) while the user is
+    /// hovering a submenu. SwiftUI's `MenuBarExtra` reacts by tearing down and
+    /// rebuilding the entire `NSMenu` (see Apple Feedback FB13683957), which
+    /// closes the open submenu mid-selection.
+    ///
+    /// `NSMenu.didBeginTrackingNotification` fires when the user opens the status
+    /// item menu; `didEndTrackingNotification` fires when the menu fully closes.
+    /// Submenus opened within that session do NOT emit new notifications — they
+    /// inherit the root menu's tracking state, which is exactly what we want.
+    private func setupMenuTrackingObservers() {
+        let nc = NotificationCenter.default
+
+        nc.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.isMenuTracking = true
+            }
+        }
+
+        nc.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.isMenuTracking = false
+                // Push one fresh reading now so the next menu open shows current data.
+                if let temp = self.hid.readTemperature() {
+                    self.temperature.value = temp
+                }
             }
         }
     }
@@ -167,12 +226,12 @@ class DeviceManager: ObservableObject {
             }
 
         case .tempColor:
-            let c = temperatureToColor(temperature, cold: tempCold, warm: tempWarm, hot: tempHot)
+            let c = temperatureToColor(temperature.value, cold: tempCold, warm: tempWarm, hot: tempHot)
                 .scaled(by: brightness)
             hid.setAllRGB(c)
             effectTimer = keepAliveTimer { [weak self] in
                 guard let self else { return }
-                let c = temperatureToColor(self.temperature, cold: self.tempCold, warm: self.tempWarm, hot: self.tempHot)
+                let c = temperatureToColor(self.temperature.value, cold: self.tempCold, warm: self.tempWarm, hot: self.tempHot)
                     .scaled(by: self.brightness)
                 self.hid.setAllRGB(c)
             }
@@ -218,8 +277,9 @@ class DeviceManager: ObservableObject {
             .autoconnect()
             .sink { [weak self] _ in
                 guard let self else { return }
+                guard !self.isMenuTracking else { return }
                 if let temp = self.hid.readTemperature() {
-                    self.temperature = temp
+                    self.temperature.value = temp
                 }
             }
     }
