@@ -73,6 +73,77 @@ struct MenuView: View {
             Text(prefix(for: .tempColor) + "Temperature Color")
         }
 
+        Menu {
+            ForEach(GradientPair.presets, id: \.name) { pair in
+                Button(gradientPairLabel(pair, current: manager.activeGradientPair)) {
+                    manager.setGradientPair(pair)
+                    manager.setEffect(.gradient)
+                }
+            }
+        } label: {
+            Text(prefix(for: .gradient) + "Gradient")
+        }
+
+        Menu {
+            ForEach(GradientPair.presets, id: \.name) { pair in
+                Button(gradientPairLabel(pair, current: manager.activeWavePair)) {
+                    manager.setWavePair(pair)
+                    manager.setEffect(.wave)
+                }
+            }
+
+            Divider()
+
+            Menu("Speed") {
+                ForEach(SpeedPreset.allCases, id: \.rawValue) { speed in
+                    Button(speedLabel(speed, current: manager.waveSpeed)) {
+                        manager.waveSpeed = speed.rawValue
+                    }
+                }
+            }
+        } label: {
+            Text(prefix(for: .wave) + "Wave")
+        }
+
+        Menu {
+            ForEach(RGBColor.presets, id: \.name) { preset in
+                Button(preset.name) {
+                    manager.setChaseColor(preset.color)
+                    manager.setEffect(.chase)
+                }
+            }
+
+            Divider()
+
+            Menu("Speed") {
+                ForEach(SpeedPreset.allCases, id: \.rawValue) { speed in
+                    Button(speedLabel(speed, current: manager.chaseSpeed)) {
+                        manager.chaseSpeed = speed.rawValue
+                    }
+                }
+            }
+        } label: {
+            Text(prefix(for: .chase) + "Chase")
+        }
+
+        effectButton("Fire", effect: .fire)
+        effectButton("Sparkle", effect: .sparkle)
+        effectButton("Aurora", effect: .aurora)
+
+        Menu {
+            ForEach(SpeedPreset.allCases, id: \.rawValue) { speed in
+                Button(speedLabel(speed, current: manager.colorCycleSpeed)) {
+                    manager.colorCycleSpeed = speed.rawValue
+                    manager.setEffect(.colorCycle)
+                }
+            }
+        } label: {
+            Text(prefix(for: .colorCycle) + "Color Cycle")
+        }
+
+        effectButton("CPU Usage", effect: .cpuUsage)
+        effectButton("Time of Day", effect: .timeOfDay)
+
         Divider()
 
         Menu("Brightness: \(BrightnessPreset(rawValue: manager.brightness)?.label ?? "\(Int(manager.brightness * 100))%")") {
@@ -134,6 +205,10 @@ struct MenuView: View {
 
     private func keepAliveMenuItem(_ interval: TimeInterval) -> String {
         (manager.keepAliveInterval == interval ? "● " : "○ ") + keepAliveLabel(interval)
+    }
+
+    private func gradientPairLabel(_ pair: GradientPair, current: GradientPair?) -> String {
+        (pair == current ? "● " : "○ ") + pair.name
     }
 
     private func openColorPanel(for effect: LightingEffect) {

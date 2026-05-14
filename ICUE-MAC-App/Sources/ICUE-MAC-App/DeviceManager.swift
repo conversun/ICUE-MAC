@@ -2,6 +2,7 @@
 import Combine
 import AppKit
 import os.log
+import Darwin
 
 /// File-scope so notification observer closures (Sendable) can reference it without crossing the @MainActor boundary.
 private let recoveryLog = OSLog(subsystem: "com.cyonsun.icue-xc7", category: "recovery")
@@ -63,9 +64,59 @@ class DeviceManager: ObservableObject {
             UserDefaults.standard.set(keepAliveInterval, forKey: "keepAliveInterval")
             // Restart only if a keep-alive driven effect is active (animation timers are independent)
             switch currentEffect {
-            case .off, .staticColor, .tempColor: setEffect(currentEffect)
-            case .rainbow, .breathe: break
+            case .off, .staticColor, .tempColor, .gradient, .timeOfDay:
+                setEffect(currentEffect)
+            case .rainbow, .breathe, .wave, .chase, .fire, .sparkle, .aurora, .colorCycle, .cpuUsage:
+                break
             }
+        }
+    }
+    @Published var gradientColorA: RGBColor = .blue {
+        didSet {
+            UserDefaults.standard.set(gradientColorA.rawValue, forKey: "gradientColorA")
+            if currentEffect == .gradient { setEffect(.gradient) }
+        }
+    }
+    @Published var gradientColorB: RGBColor = .purple {
+        didSet {
+            UserDefaults.standard.set(gradientColorB.rawValue, forKey: "gradientColorB")
+            if currentEffect == .gradient { setEffect(.gradient) }
+        }
+    }
+    @Published var waveColorA: RGBColor = .blue {
+        didSet {
+            UserDefaults.standard.set(waveColorA.rawValue, forKey: "waveColorA")
+            if currentEffect == .wave { setEffect(.wave) }
+        }
+    }
+    @Published var waveColorB: RGBColor = .purple {
+        didSet {
+            UserDefaults.standard.set(waveColorB.rawValue, forKey: "waveColorB")
+            if currentEffect == .wave { setEffect(.wave) }
+        }
+    }
+    @Published var waveSpeed: Double = 1.0 {
+        didSet {
+            UserDefaults.standard.set(waveSpeed, forKey: "waveSpeed")
+            if currentEffect == .wave { setEffect(.wave) }
+        }
+    }
+    @Published var chaseColor: RGBColor = .white {
+        didSet {
+            UserDefaults.standard.set(chaseColor.rawValue, forKey: "chaseColor")
+            if currentEffect == .chase { setEffect(.chase) }
+        }
+    }
+    @Published var chaseSpeed: Double = 1.0 {
+        didSet {
+            UserDefaults.standard.set(chaseSpeed, forKey: "chaseSpeed")
+            if currentEffect == .chase { setEffect(.chase) }
+        }
+    }
+    @Published var colorCycleSpeed: Double = 1.0 {
+        didSet {
+            UserDefaults.standard.set(colorCycleSpeed, forKey: "colorCycleSpeed")
+            if currentEffect == .colorCycle { setEffect(.colorCycle) }
         }
     }
 
@@ -74,6 +125,7 @@ class DeviceManager: ObservableObject {
     private var tempTimer: AnyCancellable?
     private var rainbowOffset: Double = 0.0
     private var breatheTime: Double = 0.0
+    private var lastCPUTicks: (active: UInt64, total: UInt64)?
     /// True while AppKit is tracking a menu (status-item menu open, submenu hovered, etc.).
     /// While true, the temperature timer skips its `@Published` write so SwiftUI's
     /// `MenuBarExtra` does not invalidate and rebuild the underlying `NSMenu` —
@@ -93,6 +145,14 @@ class DeviceManager: ObservableObject {
         if ud.object(forKey: "tempWarm") != nil { tempWarm = ud.double(forKey: "tempWarm") }
         if ud.object(forKey: "tempHot") != nil { tempHot = ud.double(forKey: "tempHot") }
         if ud.object(forKey: "keepAliveInterval") != nil { keepAliveInterval = ud.double(forKey: "keepAliveInterval") }
+        if let hex = ud.string(forKey: "gradientColorA"), let c = RGBColor(rawValue: hex) { gradientColorA = c }
+        if let hex = ud.string(forKey: "gradientColorB"), let c = RGBColor(rawValue: hex) { gradientColorB = c }
+        if let hex = ud.string(forKey: "waveColorA"), let c = RGBColor(rawValue: hex) { waveColorA = c }
+        if let hex = ud.string(forKey: "waveColorB"), let c = RGBColor(rawValue: hex) { waveColorB = c }
+        if ud.object(forKey: "waveSpeed") != nil { waveSpeed = ud.double(forKey: "waveSpeed") }
+        if let hex = ud.string(forKey: "chaseColor"), let c = RGBColor(rawValue: hex) { chaseColor = c }
+        if ud.object(forKey: "chaseSpeed") != nil { chaseSpeed = ud.double(forKey: "chaseSpeed") }
+        if ud.object(forKey: "colorCycleSpeed") != nil { colorCycleSpeed = ud.double(forKey: "colorCycleSpeed") }
 
         if let saved = ud.string(forKey: "currentEffect"),
            let effect = LightingEffect(rawValue: saved) {
@@ -235,6 +295,89 @@ class DeviceManager: ObservableObject {
                     .scaled(by: self.brightness)
                 self.hid.setAllRGB(c)
             }
+
+        case .gradient:
+            applyGradient()
+            effectTimer = keepAliveTimer { [weak self] in self?.applyGradient() }
+
+        case .wave:
+            var phase: Double = 0
+            effectTimer = animationTimer { [weak self] in
+                guard let self else { return }
+                let colors = calculateWave(colorA: self.waveColorA, colorB: self.waveColorB, phase: phase)
+                    .map { $0.scaled(by: self.brightness) }
+                self.hid.writeRGB(colors: colors)
+                phase = (phase + 0.005 * self.waveSpeed).truncatingRemainder(dividingBy: 1.0)
+            }
+
+        case .chase:
+            var position: Double = 0
+            effectTimer = animationTimer { [weak self] in
+                guard let self else { return }
+                let colors = calculateChase(color: self.chaseColor, head: position)
+                    .map { $0.scaled(by: self.brightness) }
+                self.hid.writeRGB(colors: colors)
+                position = (position + 0.3 * self.chaseSpeed)
+                    .truncatingRemainder(dividingBy: Double(Constants.ledCount))
+            }
+
+        case .fire:
+            var heat = Array(repeating: 0.0, count: Constants.ledCount)
+            effectTimer = animationTimer { [weak self] in
+                guard let self else { return }
+                let colors = calculateFire(heat: &heat)
+                    .map { $0.scaled(by: self.brightness) }
+                self.hid.writeRGB(colors: colors)
+            }
+
+        case .sparkle:
+            var state = Array(repeating: 0.0, count: Constants.ledCount)
+            effectTimer = animationTimer { [weak self] in
+                guard let self else { return }
+                let colors = calculateSparkle(state: &state, sparkColor: .white)
+                    .map { $0.scaled(by: self.brightness) }
+                self.hid.writeRGB(colors: colors)
+            }
+
+        case .aurora:
+            var time: Double = 0
+            effectTimer = animationTimer { [weak self] in
+                guard let self else { return }
+                let colors = calculateAurora(time: time)
+                    .map { $0.scaled(by: self.brightness) }
+                self.hid.writeRGB(colors: colors)
+                time += 0.005
+            }
+
+        case .colorCycle:
+            var phase: Double = 0
+            effectTimer = animationTimer { [weak self] in
+                guard let self else { return }
+                let colors = calculateColorCycle(phase: phase)
+                    .map { $0.scaled(by: self.brightness) }
+                self.hid.writeRGB(colors: colors)
+                phase = (phase + 0.001 * self.colorCycleSpeed)
+                    .truncatingRemainder(dividingBy: 1.0)
+            }
+
+        case .cpuUsage:
+            // Prime the sampler so the first 1Hz tick has real delta data; the priming
+            // call records baseline ticks and returns 0 (no delta yet).
+            lastCPUTicks = nil
+            _ = readSystemCPUUsage()
+            effectTimer = Timer.publish(every: 1.0, on: .main, in: .common)
+                .autoconnect()
+                .sink { [weak self] _ in
+                    guard let self else { return }
+                    let cpu = self.readSystemCPUUsage()
+                    let colors = calculateCPUUsage(cpuPct: cpu)
+                        .map { $0.scaled(by: self.brightness) }
+                    self.hid.writeRGB(colors: colors)
+                }
+
+        case .timeOfDay:
+            applyTimeOfDay()
+            effectTimer = keepAliveTimer { [weak self] in self?.applyTimeOfDay() }
         }
     }
 
@@ -257,6 +400,31 @@ class DeviceManager: ObservableObject {
 
     var activeTempProfile: TempProfile? {
         TempProfile.presets.first { $0.cold == tempCold && $0.warm == tempWarm && $0.hot == tempHot }
+    }
+
+    func setGradientPair(_ pair: GradientPair) {
+        gradientColorA = pair.colorA
+        gradientColorB = pair.colorB
+        if currentEffect == .gradient { setEffect(.gradient) }
+    }
+
+    func setWavePair(_ pair: GradientPair) {
+        waveColorA = pair.colorA
+        waveColorB = pair.colorB
+        if currentEffect == .wave { setEffect(.wave) }
+    }
+
+    func setChaseColor(_ color: RGBColor) {
+        chaseColor = color
+        if currentEffect == .chase { setEffect(.chase) }
+    }
+
+    var activeGradientPair: GradientPair? {
+        GradientPair.presets.first { $0.colorA == gradientColorA && $0.colorB == gradientColorB }
+    }
+
+    var activeWavePair: GradientPair? {
+        GradientPair.presets.first { $0.colorA == waveColorA && $0.colorB == waveColorB }
     }
 
     private func keepAliveTimer(_ action: @escaping () -> Void) -> AnyCancellable {
@@ -282,5 +450,62 @@ class DeviceManager: ObservableObject {
                     self.temperature.value = temp
                 }
             }
+    }
+
+    // MARK: - Effect-specific apply helpers
+
+    private func applyGradient() {
+        let colors = calculateGradient(colorA: gradientColorA, colorB: gradientColorB)
+            .map { $0.scaled(by: brightness) }
+        hid.writeRGB(colors: colors)
+    }
+
+    private func applyTimeOfDay() {
+        let colors = calculateTimeOfDay(hour: currentHourFloat())
+            .map { $0.scaled(by: brightness) }
+        hid.writeRGB(colors: colors)
+    }
+
+    private func currentHourFloat() -> Double {
+        let comps = Calendar.current.dateComponents([.hour, .minute, .second], from: Date())
+        let h = Double(comps.hour ?? 0)
+        let m = Double(comps.minute ?? 0)
+        let s = Double(comps.second ?? 0)
+        return h + m / 60.0 + s / 3600.0
+    }
+
+    /// System-wide CPU usage in [0, 1] via mach `host_statistics(HOST_CPU_LOAD_INFO)`.
+    /// Compares cumulative tick counts between calls; returns 0 on the first (priming) call.
+    private func readSystemCPUUsage() -> Double {
+        var info = host_cpu_load_info()
+        var count = mach_msg_type_number_t(MemoryLayout<host_cpu_load_info>.stride / MemoryLayout<integer_t>.stride)
+
+        let result = withUnsafeMutablePointer(to: &info) { infoPtr in
+            infoPtr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { ptr in
+                host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, ptr, &count)
+            }
+        }
+
+        guard result == KERN_SUCCESS else { return 0 }
+
+        let user   = UInt64(info.cpu_ticks.0)
+        let system = UInt64(info.cpu_ticks.1)
+        let idle   = UInt64(info.cpu_ticks.2)
+        let nice   = UInt64(info.cpu_ticks.3)
+
+        let active = user &+ system &+ nice
+        let total  = active &+ idle
+
+        guard let last = lastCPUTicks else {
+            lastCPUTicks = (active: active, total: total)
+            return 0
+        }
+
+        let dActive = active &- last.active
+        let dTotal  = total  &- last.total
+        lastCPUTicks = (active: active, total: total)
+
+        guard dTotal > 0 else { return 0 }
+        return Double(dActive) / Double(dTotal)
     }
 }
