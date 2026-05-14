@@ -1,10 +1,17 @@
 @preconcurrency import Foundation
 import Combine
-import ServiceManagement
+import AppKit
+import os.log
+
+/// File-scope so notification observer closures (Sendable) can reference it without crossing the @MainActor boundary.
+private let recoveryLog = OSLog(subsystem: "com.cyonsun.icue-xc7", category: "recovery")
+
 
 @MainActor
 class DeviceManager: ObservableObject {
-    @Published var currentEffect: LightingEffect = .off
+    @Published var currentEffect: LightingEffect = .off {
+        didSet { UserDefaults.standard.set(currentEffect.rawValue, forKey: "currentEffect") }
+    }
     @Published var staticColor: RGBColor = .red {
         didSet { UserDefaults.standard.set(staticColor.rawValue, forKey: "staticColor") }
     }
@@ -13,7 +20,6 @@ class DeviceManager: ObservableObject {
     }
     @Published var temperature: Double = 0.0
     @Published var isConnected: Bool = false
-    @Published var launchAtLogin: Bool = false
 
     @Published var rainbowSpeed: Double = 1.0 {
         didSet {
@@ -42,6 +48,16 @@ class DeviceManager: ObservableObject {
     @Published var tempHot: Double = 45.0 {
         didSet { UserDefaults.standard.set(tempHot, forKey: "tempHot") }
     }
+    @Published var keepAliveInterval: TimeInterval = Constants.keepAliveInterval {
+        didSet {
+            UserDefaults.standard.set(keepAliveInterval, forKey: "keepAliveInterval")
+            // Restart only if a keep-alive driven effect is active (animation timers are independent)
+            switch currentEffect {
+            case .off, .staticColor, .tempColor: setEffect(currentEffect)
+            case .rainbow, .breathe: break
+            }
+        }
+    }
 
     private let hid = HIDService()
     private var effectTimer: AnyCancellable?
@@ -59,6 +75,12 @@ class DeviceManager: ObservableObject {
         if ud.object(forKey: "tempCold") != nil { tempCold = ud.double(forKey: "tempCold") }
         if ud.object(forKey: "tempWarm") != nil { tempWarm = ud.double(forKey: "tempWarm") }
         if ud.object(forKey: "tempHot") != nil { tempHot = ud.double(forKey: "tempHot") }
+        if ud.object(forKey: "keepAliveInterval") != nil { keepAliveInterval = ud.double(forKey: "keepAliveInterval") }
+
+        if let saved = ud.string(forKey: "currentEffect"),
+           let effect = LightingEffect(rawValue: saved) {
+            currentEffect = effect
+        }
 
         hid.onDeviceConnected = { [weak self] in
             guard let self else { return }
@@ -70,10 +92,38 @@ class DeviceManager: ObservableObject {
             self?.isConnected = false
         }
 
-        launchAtLogin = SMAppService.mainApp.status == .enabled
-
         hid.start()
         startTemperaturePolling()
+        setupRecoveryHandlers()
+    }
+
+
+    /// Wires up sleep/wake observers and HID write-failure recovery.
+    /// Defends against silent USB failures during long keep-alive intervals.
+    private func setupRecoveryHandlers() {
+        // On persistent write failures, restart the HID manager so IOKit re-matches the device.
+        hid.onWriteFailureThresholdReached = { [weak self] in
+            guard let self else { return }
+            os_log("Persistent HID write failures — restarting HID manager", log: recoveryLog, type: .error)
+            self.hid.restart()
+            // onDeviceConnected callback will re-apply currentEffect once the device re-matches.
+        }
+
+        let nc = NSWorkspace.shared.notificationCenter
+
+        nc.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { _ in
+            os_log("System will sleep", log: recoveryLog, type: .info)
+        }
+
+        nc.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                os_log("System did wake — refreshing current effect", log: recoveryLog, type: .info)
+                // Force immediate refresh: device may have lost state during sleep,
+                // and the next keep-alive tick could be up to 15s away.
+                self.setEffect(self.currentEffect)
+            }
+        }
     }
 
     func setEffect(_ effect: LightingEffect) {
@@ -129,19 +179,6 @@ class DeviceManager: ObservableObject {
         }
     }
 
-    func toggleLaunchAtLogin() {
-        do {
-            if launchAtLogin {
-                try SMAppService.mainApp.unregister()
-            } else {
-                try SMAppService.mainApp.register()
-            }
-            launchAtLogin.toggle()
-        } catch {
-            print("Failed to toggle launch at login: \(error)")
-        }
-    }
-
     func setStaticColor(_ color: RGBColor) {
         staticColor = color
         if currentEffect == .staticColor { setEffect(.staticColor) }
@@ -164,7 +201,7 @@ class DeviceManager: ObservableObject {
     }
 
     private func keepAliveTimer(_ action: @escaping () -> Void) -> AnyCancellable {
-        Timer.publish(every: Constants.keepAliveInterval, on: .main, in: .common)
+        Timer.publish(every: keepAliveInterval, on: .main, in: .common)
             .autoconnect()
             .sink { _ in action() }
     }

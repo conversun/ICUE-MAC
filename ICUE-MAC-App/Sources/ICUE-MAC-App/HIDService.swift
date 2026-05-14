@@ -1,10 +1,16 @@
 import Foundation
 import IOKit.hid
+import os.log
 
 class HIDService {
     private var manager: IOHIDManager?
     private var device: IOHIDDevice?
     private let queue = DispatchQueue(label: "com.cyonsun.icue-xc7.hid")
+    private static let log = OSLog(subsystem: "com.cyonsun.icue-xc7", category: "hid")
+    private static let writeFailureThreshold = 3
+    private var consecutiveWriteFailures = 0  // queue-protected
+    private static let restartCooldown: TimeInterval = 30.0
+    private var lastRestartTime: Date?  // queue-protected
 
     var isConnected: Bool {
         queue.sync { device != nil }
@@ -12,6 +18,7 @@ class HIDService {
 
     var onDeviceConnected: (() -> Void)?
     var onDeviceDisconnected: (() -> Void)?
+    var onWriteFailureThresholdReached: (() -> Void)?  // fired on main queue
 
     func start() {
         queue.sync {
@@ -62,6 +69,29 @@ class HIDService {
         }
     }
 
+    /// Tear down and re-establish the HID manager so IOKit re-matches the device.
+    /// Gated by a cooldown to prevent runaway restart loops if writes keep failing
+    /// post-restart (e.g., device truly gone). Returns true if restart actually executed.
+    @discardableResult
+    func restart() -> Bool {
+        let canProceed: Bool = queue.sync {
+            let now = Date()
+            if let last = lastRestartTime, now.timeIntervalSince(last) < Self.restartCooldown {
+                return false
+            }
+            lastRestartTime = now
+            return true
+        }
+        guard canProceed else {
+            os_log("HID restart skipped: cooldown active (%{public}.0fs)", log: Self.log, type: .info, Self.restartCooldown)
+            return false
+        }
+        os_log("HID restart: tearing down and re-opening manager", log: Self.log, type: .info)
+        stop()
+        start()
+        return true
+    }
+
     func writeRGB(colors: [RGBColor]) {
         queue.async { [weak self] in
             guard let self, let currentDevice = self.device else {
@@ -81,7 +111,7 @@ class HIDService {
                 buffer[base + 2] = colors[i].b
             }
 
-            _ = buffer.withUnsafeBytes { rawBuffer in
+            let result = buffer.withUnsafeBytes { rawBuffer -> IOReturn in
                 guard let pointer = rawBuffer.baseAddress else {
                     return kIOReturnError
                 }
@@ -93,7 +123,22 @@ class HIDService {
                     buffer.count
                 )
             }
+
+            if result == kIOReturnSuccess {
+                if self.consecutiveWriteFailures > 0 {
+                    os_log("HID write recovered after %{public}d failures", log: Self.log, type: .info, self.consecutiveWriteFailures)
+                    self.consecutiveWriteFailures = 0
+                }
+            } else {
+                self.consecutiveWriteFailures += 1
+                os_log("HID write failed: 0x%{public}08X (consecutive=%{public}d)", log: Self.log, type: .error, UInt32(bitPattern: result), self.consecutiveWriteFailures)
+                if self.consecutiveWriteFailures == Self.writeFailureThreshold {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onWriteFailureThresholdReached?()
+                    }
+                }
         }
+    }
     }
 
     func setAllRGB(_ color: RGBColor) {

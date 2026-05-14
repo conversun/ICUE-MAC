@@ -7,7 +7,7 @@ struct MenuView: View {
     @StateObject private var colorPanelObserver = ColorPanelObserver()
 
     var body: some View {
-        Text("Water Temp: \(String(format: "%.1f°C", manager.temperature))")
+        Text("Water Temp: \(Int(manager.temperature.rounded()))°C")
             .disabled(true)
 
         Divider()
@@ -35,6 +35,7 @@ struct MenuView: View {
             ForEach(SpeedPreset.allCases, id: \.rawValue) { speed in
                 Button(speedLabel(speed, current: manager.rainbowSpeed)) {
                     manager.rainbowSpeed = speed.rawValue
+                    manager.setEffect(.rainbow)
                 }
             }
         } label: {
@@ -83,10 +84,12 @@ struct MenuView: View {
             }
         }
 
-        Divider()
-
-        Button(manager.launchAtLogin ? "✓ Launch at Login" : "  Launch at Login") {
-            manager.toggleLaunchAtLogin()
+        Menu("Keep-Alive: \(keepAliveLabel(manager.keepAliveInterval))") {
+            ForEach(Constants.keepAliveIntervalPresets, id: \.self) { interval in
+                Button(keepAliveMenuItem(interval)) {
+                    manager.keepAliveInterval = interval
+                }
+            }
         }
 
         if !manager.isConnected {
@@ -124,6 +127,14 @@ struct MenuView: View {
     private func tempProfileLabel(_ profile: TempProfile) -> String {
         let active = manager.activeTempProfile
         return (active == profile ? "● " : "○ ") + profile.name
+    }
+
+    private func keepAliveLabel(_ interval: TimeInterval) -> String {
+        "\(Int(interval))s"
+    }
+
+    private func keepAliveMenuItem(_ interval: TimeInterval) -> String {
+        (manager.keepAliveInterval == interval ? "● " : "○ ") + keepAliveLabel(interval)
     }
 
     private func openColorPanel(for effect: LightingEffect) {
